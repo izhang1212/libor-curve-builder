@@ -39,7 +39,7 @@ class ZeroCurve:
     def insertion_index(self, t):
         lo, hi = 0, len(self.times)
         while lo < hi:
-            mid = (lo + hi) / 2
+            mid = (lo + hi) // 2
             if self.times[mid] < t:
                 lo = mid + 1
             else:
@@ -64,5 +64,5 @@ class ZeroCurve:
         i = self.insertion_index(t)
         t0, t1 = times[i-1], times[i]
         z0, z1 = zeros[i-1], zeros[i]
-        w = (t-t0)/(t-t0)
-        return z0 + w(z1-z0)
+        w = (t - t0) / (t1 - t0)
+        return z0 + w * (z1-z0)
