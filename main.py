@@ -1,12 +1,19 @@
 """
 Bootstrap the LIBOR zero curve from the seed quotes, check that the inputs
-reprice, print the curve, and plot it.
+reprice, walk through the process in a set of plots, and price a swap
+against the resulting curve.
 """
 
 import os
-from data.seed_data import DEPOSITS, FUTURES, SWAPS
+from data.seed_data import DEPOSITS, FUTURES, SWAPS, SWAP, VALUATION_DATE
 from bootstrap.engine import bootstrap
-from plots.plot import plot_curve, plot_forward_curve, plot_table
+from pricing.engine import price_swap, swap_schedule, swap_periods
+from plots.plot import (
+    plot_curve, plot_forward_curve, plot_process, plot_table,
+    plot_forward_process, plot_swap_cashflow_process,
+)
+
+OUTPUT_DIR = "output"
 
 
 def reprice_check(curve):
@@ -37,31 +44,74 @@ def reprice_check(curve):
     return worst
 
 
+def reset_output_dir():
+    """Every run starts from a clean output/ so nothing stale lingers."""
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    for name in os.listdir(OUTPUT_DIR):
+        file_path = os.path.join(OUTPUT_DIR, name)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+
+
 def main():
+    reset_output_dir()
+
     curve = bootstrap(DEPOSITS, FUTURES, SWAPS)
 
     print(f"{'maturity':>10} {'zero %':>10} {'DF':>12}")
     for t, z in curve.nodes:
-        print(f"{t:>10.3f} {z*100:>10.4f} {curve.df(t):>12.6f}")
+        print(f"{t:>10.3f} {z * 100:>10.4f} {curve.df(t):>12.6f}")
 
     worst = reprice_check(curve)
     print(f"\nworst input repricing error: {worst:.2e}")
 
-    os.makedirs("output", exist_ok=True)
-    path = plot_curve(curve, DEPOSITS, FUTURES, SWAPS)
-    print(f"plot written to {path}")
+    # 1. the bootstrapped zero curve
+    curve_path = plot_curve(curve, DEPOSITS, FUTURES, SWAPS,
+                             path=f"{OUTPUT_DIR}/1.Curve.png")
+    print(f"\n1. curve plot written to {curve_path}")
 
-    fwd_path = plot_forward_curve(curve)
-    print(f"forward plot written to {fwd_path}")
+    # 2. the forward curve it implies
+    forward_path = plot_forward_curve(curve, path=f"{OUTPUT_DIR}/2.Forward.png")
+    print(f"2. forward plot written to {forward_path}")
 
-    table_path = plot_table(curve)
-    print(f"table written to {table_path}")
+    # 3. one worked bootstrap example per instrument
+    process_path = plot_process(curve, DEPOSITS, FUTURES, SWAPS,
+                                 path=f"{OUTPUT_DIR}/3.Process.png")
+    print(f"3. process plot written to {process_path}")
 
-    from bootstrap.curve import ZeroCurve
-    c = ZeroCurve()
-    c.add_node(1.0, 0.048)
-    c.add_node(2.0, 0.050)
-    print(c.zero(1.0), c.zero(1.5), c.zero(2.0))
+    # 4. the priced swap's own payment schedule read off the curve
+    table_rows = swap_schedule(curve, SWAP, VALUATION_DATE)
+    table_path = plot_table(table_rows, path=f"{OUTPUT_DIR}/4.Table.png",
+                             title="Swap payment schedule", label_col="Payment date")
+    print(f"4. table written to {table_path}")
+
+    # price the swap now so steps 5-6 can walk through one real period of it
+    swap_csv_path = f"{OUTPUT_DIR}/7.Swap_Pricing.csv"
+    rows, summary = price_swap(curve, SWAP, VALUATION_DATE, path=swap_csv_path)
+    periods = swap_periods(SWAP, VALUATION_DATE)
+    demo_idx = len(periods) // 2
+    demo_period = periods[demo_idx]
+    demo_row = rows[demo_idx]
+
+    # 5. zero curve -> forward rate, for that same period
+    forward_process_path = plot_forward_process(
+        curve, demo_period["t_start"], demo_period["t_end"],
+        demo_period["start"].isoformat(), demo_period["end"].isoformat(),
+        path=f"{OUTPUT_DIR}/5.Forward_Process.png")
+    print(f"5. forward process plot written to {forward_process_path}")
+
+    # 6. price that one period's fixed & floating cashflows and net them
+    swap_process_path = plot_swap_cashflow_process(
+        demo_row, demo_period["tau"], curve.df(demo_period["t_end"]), SWAP["notional"],
+        path=f"{OUTPUT_DIR}/6.Swap_Process.png")
+    print(f"6. swap cashflow process plot written to {swap_process_path}")
+
+    # 7. the full priced schedule
+    print(f"\nswap priced: {len(rows)} periods")
+    print(f"  fixed leg PV   : {summary['fixed_pv']:15,.2f}")
+    print(f"  floating leg PV: {summary['floating_pv']:15,.2f}")
+    print(f"  net ({summary['pov']}): {summary['net']:15,.2f}")
+    print(f"7. swap pricing written to {swap_csv_path}")
 
 
 if __name__ == "__main__":

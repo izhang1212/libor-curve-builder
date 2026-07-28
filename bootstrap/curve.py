@@ -66,3 +66,7 @@ class ZeroCurve:
         z0, z1 = zeros[i-1], zeros[i]
         w = (t - t0) / (t1 - t0)
         return z0 + w * (z1-z0)
+
+    # Forward rate over [t1, t2] from discount factors f = (DF(t1) / DF(t2) - 1) / (t2 - t1)
+    def forward(self, t1, t2):
+        return (self.df(t1) / self.df(t2) - 1.0) / (t2 - t1)

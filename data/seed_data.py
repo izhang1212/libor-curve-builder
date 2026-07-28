@@ -2,6 +2,7 @@
 """
 Synthetic market quotes in the spirit of Hull's bootstrapping example.
 """
+from datetime import date
 
 # LIBOR deposits: (maturity in years, simple annual rate, Act/360)
 DEPOSITS = [
@@ -29,3 +30,14 @@ SWAPS = [
     (7.0, 0.0515, 2),
     (10.0, 0.0520, 2),
 ]
+
+VALUATION_DATE = date(2026, 1, 1)
+
+SWAP = {
+    "notional": 10_000_000.0,     # 10mm
+    "fixed_rate": 0.0520,         # the fixed leg's rate (annual)
+    "frequency": 2,               # payments per year (semiannual)
+    "start": date(2026, 1, 1),    # accrual begins
+    "end": date(2031, 1, 1),      # 5-year swap
+    "pov": "payer",               # "payer" pays fixed / receives floating; sets the sign of the net
+}
